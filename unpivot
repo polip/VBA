@@ -1,0 +1,97 @@
+Arguments
+'List: The range to be normalized.
+'RepeatingColsCount: The number of columns, starting with the leftmost,
+'   whose headings remain the same.
+'NormalizedColHeader: The column header for the rolled-up category.
+'DataColHeader: The column header for the normalized data.
+'NewWorkbook: Put the sheet with the data in a new workbook?
+'
+'NOTE: The data must be in a contiguous range and the
+'rows that will be repeated must be to the left,
+'with the rows to be normalized to the right.
+
+Sub NormalizeList(List As Excel.Range, RepeatingColsCount As Long, _
+    NormalizedColHeader As String, DataColHeader As String, _
+    Optional NewWorkbook As Boolean = False)
+
+Dim FirstNormalizingCol As Long, NormalizingColsCount As Long
+Dim ColsToRepeat As Excel.Range, ColsToNormalize As Excel.Range
+Dim NormalizedRowsCount As Long
+Dim RepeatingList() As String
+Dim NormalizedList() As Variant
+Dim ListIndex As Long, i As Long, j As Long
+Dim wbSource As Excel.Workbook, wbTarget As Excel.Workbook
+Dim wsTarget As Excel.Worksheet
+
+With List
+    'If the normalized list won't fit, you must quit.
+   If .Rows.Count * (.Columns.Count - RepeatingColsCount) > .Parent.Rows.Count Then
+        MsgBox "The normalized list will be too many rows.", _
+               vbExclamation + vbOKOnly, "Sorry"
+        Exit Sub
+    End If
+
+    'You have the range to be normalized and the count of leftmost rows to be repeated.
+   'This section uses those arguments to set the two ranges to parse
+   'and the two corresponding arrays to fill
+   FirstNormalizingCol = RepeatingColsCount + 1
+    NormalizingColsCount = .Columns.Count - RepeatingColsCount
+    Set ColsToRepeat = .Cells(1).Resize(.Rows.Count, RepeatingColsCount)
+    Set ColsToNormalize = .Cells(1, FirstNormalizingCol).Resize(.Rows.Count, NormalizingColsCount)
+    NormalizedRowsCount = ColsToNormalize.Columns.Count * .Rows.Count
+    ReDim RepeatingList(1 To NormalizedRowsCount, 1 To RepeatingColsCount)
+    ReDim NormalizedList(1 To NormalizedRowsCount, 1 To 2)
+End With
+
+'Fill in every i elements of the repeating array with the repeating row labels.
+For i = 1 To NormalizedRowsCount Step NormalizingColsCount
+    ListIndex = ListIndex + 1
+    For j = 1 To RepeatingColsCount
+        RepeatingList(i, j) = List.Cells(ListIndex, j).Value2
+    Next j
+Next i
+
+'We stepped over most rows above, so fill in other repeating array elements.
+For i = 1 To NormalizedRowsCount
+    For j = 1 To RepeatingColsCount
+        If RepeatingList(i, j) = "" Then
+            RepeatingList(i, j) = RepeatingList(i - 1, j)
+        End If
+    Next j
+Next i
+
+'Fill in each element of the first dimension of the normalizing array
+'with the former column header (which is now another row label) and the data.
+With ColsToNormalize
+    For i = 1 To .Rows.Count
+        For j = 1 To .Columns.Count
+            NormalizedList(((i - 1) * NormalizingColsCount) + j, 1) = .Cells(1, j)
+            NormalizedList(((i - 1) * NormalizingColsCount) + j, 2) = .Cells(i, j)
+        Next j
+    Next i
+End With
+
+'Put the normal data in the same workbook, or a new one.
+If NewWorkbook Then
+    Set wbTarget = Workbooks.Add
+    Set wsTarget = wbTarget.Worksheets(1)
+Else
+    Set wbSource = List.Parent.Parent
+    With wbSource.Worksheets
+        Set wsTarget = .Add(after:=.Item(.Count))
+    End With
+End If
+
+With wsTarget
+    'Put the data from the two arrays in the new worksheet.
+   .Range("A1").Resize(NormalizedRowsCount, RepeatingColsCount) = RepeatingList
+    .Cells(1, FirstNormalizingCol).Resize(NormalizedRowsCount, 2) = NormalizedList
+
+    'At this point there will be repeated header rows, so delete all but one.
+   .Range("1:" & NormalizingColsCount - 1).EntireRow.Delete
+
+    'Add the headers for the new label column and the data column.
+   .Cells(1, FirstNormalizingCol).Value = NormalizedColHeader
+    .Cells(1, FirstNormalizingCol + 1).Value = DataColHeader
+End With
+End Sub
