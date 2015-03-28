@@ -71,7 +71,7 @@ With ColsToNormalize
     Next i
 End With
 
-'Put the normal data in the same workbook, or a new one.
+
 If NewWorkbook Then
     Set wbTarget = Workbooks.Add
     Set wsTarget = wbTarget.Worksheets(1)
